@@ -52,5 +52,5 @@ await graphcool.mutex.acquire('__MUTEX_NAME__')
 
 Use the following syntax to release the lock:
 ```js
-graphcool.mutex.release('__MUTEX_NAME__')
+graphcool.mutex.release()
 ```
