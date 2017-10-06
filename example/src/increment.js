@@ -33,7 +33,7 @@ module.exports = async (event) => {
 
   function wait(graphcool) {
     setTimeout(function () {
-      graphcool.mutex.release('increment')
+      graphcool.mutex.release()
     }, 5000)
   }
 }
