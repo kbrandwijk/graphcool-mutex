@@ -28,11 +28,12 @@ export function withMutex(graphcool: any, region?:string) {
   }
 }
 
-export default class Mutex {
+class Mutex {
   subscriptionHostname: string
   api: any
   projectId: string
   mutexId: number
+  subscription: ws
 
   constructor(graphcool) {
     this.api = graphcool.api('simple/v1')
@@ -40,25 +41,64 @@ export default class Mutex {
   }
 
   async acquire(mutexName: string) {
+    // Fist, set up the subscription
+    // Setup the subscription
+    const subscriptionEndpoint:string = `wss://${this.subscriptionHostname}/v1/${this.projectId}`
+    this.subscription = new ws(subscriptionEndpoint, { protocol: 'graphql-ws' })
+
+    const result = await new Promise(async (resolve, reject) => {
+      const subscriptionRequest:string = `
+        subscription {
+          Mutex(filter: { mutation_in: [DELETED], node: { name: "${mutexName}"}}){
+            previousValues{ name }
+          }
+        }`
+
+      this.subscription.on('open', () => {
+        // Send connection_init message on connection open
+        this.subscription.send(JSON.stringify({type: 'connection_init'}))
+      })
+
+      this.subscription.on('message', async (data) => {
+        const message:any = JSON.parse(data)
+        // Server sends connection_ack after connection_init
+        // Send the subscription request
+        if (message.type == "connection_ack") {
+          const message = JSON.stringify({id: 'mutexSubscription', type: 'start', payload: { query: `${subscriptionRequest}` }})
+          this.subscription.send(message)
+
+          // Try to create the Mutex initially. Will close the subscription if successful
+          if (await this.tryCreateMutex(mutexName)) resolve()
+        }
+        // Check for subscription result we are looking for
+        if (message.type == "data" &&
+            message.id == "mutexSubscription" &&
+            message.payload.data.Mutex.previousValues.name == mutexName) {
+              // Mutex was released, try to create it, if not, keep waiting
+              if (await this.tryCreateMutex(mutexName)) resolve()
+        }
+      })
+    })
+  }
+
+  async tryCreateMutex(mutexName: string) {
     // Try to create the Mutex node
-    //console.log('creating new mutex')
     const request = `mutation { createMutex(name: "${mutexName}") { id } }`
 
     try {
+      // If it doesn't exist, we can close the subscription and continue
       const result:any = await this.api.request(request)
       this.mutexId = result.createMutex.id
-      //console.log('mutex created with id ' + this.mutexId)
-      return
+      this.subscription.send(JSON.stringify({type: 'connection_terminate'}))
+      this.subscription.close()
+      return true
     }
     catch(error){
-      // Existing Mutex lock
-      if (error.response.errors[0].code == 3010){
-        //console.log('existing mutex lock')
-        await setupSubscription(this.subscriptionHostname, this.projectId, mutexName)
-        await this.acquire(mutexName)
-        return
-      }
-      else{
+      // Existing Mutex lock would cause 3010. In that case, we do nothing
+      // and just use the subscription
+      if (error.response.errors[0].code != 3010){
+        this.subscription.send(JSON.stringify({type: 'connection_terminate'}))
+        this.subscription.close()
         throw new Error('Error creating Mutex record')
       }
     }
@@ -69,46 +109,6 @@ export default class Mutex {
     //console.log('deleting mutex with id ' + this.mutexId)
     this.api.request(request).then(r => {return}).catch(e => {return})
   }
-}
-
-async function setupSubscription(subscriptionHostname, projectId, mutexName): Promise<object> {
-  // Setup the subscription
-  const subscriptionEndpoint:string = `wss://${subscriptionHostname}/v1/${projectId}`
-  const subscription:ws = new ws(subscriptionEndpoint, { protocol: 'graphql-ws' })
-
-  return new Promise((resolve, reject) => {
-    const subscriptionRequest:string = `
-      subscription {
-        Mutex(filter: { mutation_in: [DELETED], node: { name: "${mutexName}"}}){
-          previousValues{ name }
-        }
-      }`
-
-    subscription.on('open', () => {
-      // Send connection_init message on connection open
-      subscription.send(JSON.stringify({type: 'connection_init'}))
-    })
-
-    subscription.on('message', async (data) => {
-      const message:any = JSON.parse(data)
-      // Server sends connection_ack after connection_init
-      // Send the subscription request
-      if (message.type == "connection_ack") {
-        const message = JSON.stringify({id: 'mutexSubscription', type: 'start', payload: { query: `${subscriptionRequest}` }})
-        subscription.send(message)
-        //console.log('waiting for subscription delete message')
-      }
-      // Check for subscription result we are looking for
-      if (message.type == "data" &&
-          message.id == "mutexSubscription" &&
-          message.payload.data.Mutex.previousValues.name == mutexName) {
-            subscription.send(JSON.stringify({type: 'connection_terminate'}))
-            subscription.close()
-            //console.log('delete message received')
-            resolve()
-      }
-    })
-  })
 }
 
 const subscriptionEndpoints = {
