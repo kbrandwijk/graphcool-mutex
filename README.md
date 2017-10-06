@@ -11,7 +11,7 @@ For example, you want to update an auto-increment field in a pipeline hook, or y
 
 In these cases, you need a mechanism to make sure these operations are executed sequentially. This library implements the Mutex pattern to achieve this.
 
-![Mutex pattern](./docs/mutexdiagram.png)
+![Mutex pattern](./docs/mutexdiagram.jpg)
 
 Each of the parallel operations (threads) requests a Mutex lock. When the lock does not exist yet, it is acquired immediately. If a lock already exists, the `acquire` method will wait for the lock to be released by the currently active operation. This ensures all operations are executed sequentially.
 
