@@ -1,0 +1,10 @@
+type Post implements Node {
+  id: ID! @isUnique
+  name: String
+  version: Int
+}
+
+type Mutex implements Node {
+  id: ID! @isUnique
+  name: String! @isUnique
+}

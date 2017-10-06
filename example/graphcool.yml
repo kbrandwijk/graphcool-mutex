@@ -1,0 +1,15 @@
+types: ./types.graphql
+
+functions:
+  increment-post-version:
+    handler: { code: { src: ./src/increment.js } }
+    type: operationBefore
+    operation: Post.update
+
+permissions:
+- operation: "*"
+
+rootTokens:
+- increment
+
+modules: {}
