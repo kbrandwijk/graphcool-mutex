@@ -14,6 +14,7 @@ module.exports = async (event) => {
 
   await graphcool.mutex.acquire('increment')
 
+  // Retrieve current version number
   const request = `
     query {
       Post(id: "${event.data.id}") { version }
@@ -22,9 +23,17 @@ module.exports = async (event) => {
   const result = await api.request(request)
   const { version } = result.Post
 
+  // Increase version number
   event.data.version = version + 1
 
-  graphcool.mutex.release('increment')
+  // Include a sleep to demonstrate the mutex effect
+  wait(graphcool)
 
   return { data: event.data }
+
+  function wait(graphcool) {
+    setTimeout(function () {
+      graphcool.mutex.release('increment')
+    }, 5000)
+  }
 }
