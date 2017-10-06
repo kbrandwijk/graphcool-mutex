@@ -1,19 +1,44 @@
-import { GraphQLClient } from 'graphql-request'
+import Graphcool, { fromEvent } from 'graphcool-lib'
 import * as ws from 'ws'
 
 let subscription: ws
 
-export class Mutex {
+export function withMutex(graphcool: any, region?:string) {
+  graphcool.mutex = new Mutex(graphcool)
+
+  if (region) {
+    graphcool.mutex.subscriptionHostname = subscriptionEndpoints[region]
+    return graphcool
+  }
+  else {
+    const regionRequest = `
+    query{
+      viewer{
+        project(id: "${graphcool.projectId}") {
+          region
+        }
+      }
+    }`
+
+    const systemClient = graphcool.systemClient()
+    systemClient.options.headers = { Authorization: `Bearer ${graphcool.pat}`}
+
+    return systemClient.request(regionRequest).then(res => {
+      graphcool.mutex.subscriptionHostname = subscriptionEndpoints[res.viewer.project.region]
+      return graphcool
+    })
+  }
+}
+
+export default class Mutex {
   subscriptionHostname: string
-  api: GraphQLClient
+  api: any
   projectId: string
   mutexId: number
 
-
-  constructor(subscriptionHostname:string, api: GraphQLClient, projectId: string) {
-    this.subscriptionHostname = subscriptionHostname
-    this.api = api
-    this.projectId = projectId
+  constructor(graphcool) {
+    this.api = graphcool.api('simple/v1')
+    this.projectId = graphcool.projectId
   }
 
   async acquire(name: string) {
@@ -57,6 +82,12 @@ export class Mutex {
     const request = `mutation { deleteMutex(id: "${this.mutexId}") { id } }`
     this.api.request(request).then(r => {return}).catch(e => {return})
   }
+}
+
+const subscriptionEndpoints = {
+  EU_WEST_1: 'subscriptions.graph.cool',
+  US_WEST_2: 'subscriptions.us-west-2.graph.cool',
+  AP_NORTHEAST_1: 'subscriptions.ap-northeast-1.graph.cool',
 }
 
 function setupSubscription(subscriptionHostname: string, name: string, projectId: string): Promise<object> {

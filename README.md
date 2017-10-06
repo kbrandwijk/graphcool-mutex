@@ -17,20 +17,25 @@ type Mutex implements Node {
 
 Import the library into your Graphcool function.
 ```js
-const { Mutex } = require('@agartha/graphcool-mutex')
+const { withMutex } = require('@agartha/graphcool-mutex')
 ```
 
-Initialize the mutex, passing in your subscription host, `graphcool-lib` api and `projectId`.
+Wrap your `graphcool-lib` initialization with `withMutex`
 ```js
-const mutex = new Mutex('subscriptions.graph.cool', api, projectId)
+const graphcool = await withMutex(fromEvent(event))
+```
+
+Optionally, you can specify your project region manually, to avoid the async call:
+```js
+const graphcool = withMutex(fromEvent(event), 'EU_WEST_1')
 ```
 
 Use the following syntax to acquire a Mutex lock:
 ```js
-await mutex.acquire('__MUTEX_NAME__')
+await graphcool.mutex.acquire('__MUTEX_NAME__')
 ```
 
 Use the following syntax to release the lock:
 ```js
-mutex.release('__MUTEX_NAME__')
+graphcool.mutex.release('__MUTEX_NAME__')
 ```
