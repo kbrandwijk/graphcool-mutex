@@ -22,7 +22,7 @@ Each of the parallel operations (threads) requests a Mutex lock. When the lock d
 Using this library requires a Type on your Graphcool project with the following schema:
 
 ```graphql
-type Mutex implements Node {
+type Mutex @node {
   id: ID! @isUnique
   name: String! @isUnique
 }
